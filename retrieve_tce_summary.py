@@ -16,20 +16,38 @@ from comment_matching import *
 
 tois_content = requests.get('https://archive.stsci.edu/missions/tess/catalogs/toi/tois.csv').content
 tois_table = pd.read_csv(io.StringIO(tois_content.decode('utf-8')), skiprows=range(0, 4), usecols=['TIC', 'Public Comment'])
-tois_summary_matrix = []
+tois_summary_map = dict()
 for index, row in tois_table.iterrows():
     tic = row['TIC']
     comment = row['Public Comment']
     if comment != comment:
         # Is NA/NaN
         comment = ''
-    eb = int(is_eb(comment))
-    variable = int(is_variable(comment))
-    oddeven = int(is_oddeven(comment))
-    vshaped = int(is_vshaped(comment))
-    shoulders = int(is_shoulders(comment))
-    tois_summary_matrix.append([tic, 1, eb, variable, oddeven, vshaped, shoulders])
-summary_tois = pd.DataFrame(tois_summary_matrix, columns=['TICID', 'is_toi', 'eb', 'variable', 'odd_even', 'v_shaped', 'shoulders'])
+
+    blank = comment is None or comment == ''
+    eb = is_eb(comment)
+    variable = is_variable(comment)
+    oddeven = is_oddeven(comment)
+    vshaped = is_vshaped(comment)
+    shoulders = is_shoulders(comment)
+
+    summary_row = tois_summary_map.get(tic)
+    if summary_row is None:
+        summary_row = [tic, 1, 0, 0, 0, 0, 0, 0]
+        tois_summary_map[tic] = summary_row
+    if eb:
+        summary_row[2] = 1
+    if variable:
+        summary_row[3] = 1
+    if oddeven:
+        summary_row[4] = 1
+    if vshaped:
+        summary_row[5] = 1
+    if shoulders:
+        summary_row[6] = 1
+    if blank:
+        summary_row[7] = 1
+summary_tois = pd.DataFrame(tois_summary_map.values(), columns=['TICID', 'is_toi', 'eb', 'variable', 'odd_even', 'v_shaped', 'shoulders', 'blank'])
 print('Length of TOI summary frame: %d' % len(summary_tois))
 
 # Download TCE data
@@ -71,7 +89,7 @@ print('Length of TCE summary frame: %d' % len(results_frame))
 
 # Join the two frames
 
-joined_data = pd.merge(results_frame, summary_tois, how='left', on='TICID').fillna(0)
+joined_data = pd.merge(results_frame, summary_tois, how='outer', on='TICID').fillna(0)
 print('Length of joined summary frame: %d' % len(joined_data))
 joined_data.drop_duplicates(subset=['TICID'], inplace=True)
 print('Length after dropping duplicates: %d' % len(joined_data))
